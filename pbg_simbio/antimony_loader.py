@@ -67,6 +67,18 @@ def model_from_sbml(sbml: str, name: str = "model"):
         for c in model.getListOfCompartments()
     }
 
+    # Assignment rules define a quantity as a formula of others (e.g.
+    # CT = C2 + CP + M + pM). They are NOT state variables; we inline their
+    # expression wherever they're referenced rather than integrating them.
+    # Without this, such a "species" stays a free variable at initial 0 and a
+    # rate law like M/CT evaluates 0/0 at compile time (BIOMD0000000005).
+    assignment_rules = {
+        rule.getVariable(): rule.getMath()
+        for rule in model.getListOfRules()
+        if rule.isAssignment()
+    }
+    assignment_vars = set(assignment_rules)
+
     namespace: dict[str, Any] = {"__annotations__": {}}
     volume = next(iter(compartment_size.values()), 1.0)
     namespace["volume"] = volume_field(default=float(volume))
@@ -75,8 +87,13 @@ def model_from_sbml(sbml: str, name: str = "model"):
     eval_names: dict[str, Any] = {}
     species_objs: dict[str, Any] = {}
     species_names: list[str] = []
+    # Boundary / constant species are referenced by rate laws but are NOT
+    # consumed by reactions (their value is held fixed unless a rule changes it).
+    fixed_species: set[str] = set()
     for s in model.getListOfSpecies():
         sid = s.getId()
+        if sid in assignment_vars:
+            continue  # derived; inlined below
         if s.isSetInitialConcentration():
             initial, is_conc = s.getInitialConcentration(), True
         elif s.isSetInitialAmount():
@@ -91,10 +108,14 @@ def model_from_sbml(sbml: str, name: str = "model"):
         species_objs[sid] = obj
         eval_names[sid] = obj
         species_names.append(sid)
+        if s.getBoundaryCondition() or s.getConstant():
+            fixed_species.add(sid)
 
     parameter_names: list[str] = []
     for p in model.getListOfParameters():
         pid = p.getId()
+        if pid in assignment_vars:
+            continue  # derived; inlined below
         value = p.getValue() if p.isSetValue() else 0.0
         param = assign(default=float(value))
         namespace[pid] = param
@@ -105,21 +126,61 @@ def model_from_sbml(sbml: str, name: str = "model"):
     for cid, size in compartment_size.items():
         eval_names.setdefault(cid, float(size))
 
+    # Resolve assignment-rule expressions into symbolic expressions, inlining
+    # them into eval_names. Iterate so rules that reference other rules resolve
+    # once their dependencies are available.
+    pending = dict(assignment_rules)
+    while pending:
+        progressed = False
+        for var, math_node in list(pending.items()):
+            try:
+                expr = _eval_rate_law(libsbml.formulaToL3String(math_node), eval_names)
+            except (KeyError, NameError):
+                continue  # depends on an as-yet-unresolved assignment var
+            eval_names[var] = expr
+            del pending[var]
+            progressed = True
+        if not progressed:
+            # Cyclic or references something unknown: fall back to 0.0 so the
+            # build doesn't hang/crash (these vars are not integrated anyway).
+            for var in pending:
+                eval_names.setdefault(var, 0.0)
+            break
+
     for r in model.getListOfReactions():
         kinetic = r.getKineticLaw()
         if kinetic is None:
             raise NotImplementedError(f"Reaction {r.getId()} has no kinetic law")
-        local = {p.getId(): float(p.getValue()) for p in kinetic.getListOfParameters()}
+        # Register local (reaction-scoped) parameters as model Parameters under
+        # namespaced names, so they stay symbolic in the rate law. Substituting
+        # them as plain floats would let an all-literal sub-expression evaluate
+        # at build time — e.g. a kinetic law that reduces to 0.0/0.0 raises
+        # ZeroDivisionError during compilation (BIOMD0000000005).
+        local: dict[str, Any] = {}
+        for p in kinetic.getListOfParameters():
+            pid = p.getId()
+            namespaced = f"{r.getId()}__{pid}"
+            param = assign(default=float(p.getValue()) if p.isSetValue() else 0.0)
+            namespace[namespaced] = param
+            namespace["__annotations__"][namespaced] = Parameter
+            local[pid] = param
         scope = {**eval_names, **local}
         rate_law = _eval_rate_law(libsbml.formulaToL3String(kinetic.getMath()), scope)
-        reactants = [
-            Reactant(species_objs[sr.getSpecies()], sr.getStoichiometry())
-            for sr in r.getListOfReactants()
-        ]
-        products = [
-            Reactant(species_objs[sr.getSpecies()], sr.getStoichiometry())
-            for sr in r.getListOfProducts()
-        ]
+
+        def _reactants(refs):
+            # Only true state species become reactants. Boundary / constant /
+            # assignment-rule species are not consumed by reactions (SBML
+            # boundaryCondition semantics), and skipping them avoids KeyErrors
+            # for species that were never registered as state variables.
+            out = []
+            for sr in refs:
+                sid = sr.getSpecies()
+                if sid in species_objs and sid not in fixed_species:
+                    out.append(Reactant(species_objs[sid], sr.getStoichiometry()))
+            return out
+
+        reactants = _reactants(r.getListOfReactants())
+        products = _reactants(r.getListOfProducts())
         namespace[f"_rxn_{r.getId()}"] = RateLaw(
             reactants=reactants, products=products, rate_law=rate_law
         )

@@ -233,6 +233,8 @@ class SimbioProcess(Process):
 
         delta = {}
         for name in self._species_names:
+            if name not in result:  # e.g. assignment-rule / non-integrated species
+                continue
             final = float(np.asarray(result[name])[-1])
             delta[name] = final - float(current[name])
         return {"concentrations": delta}
@@ -355,9 +357,19 @@ class SimbioUTCStep(BaseSimbioStep):
         save_at = np.linspace(0.0, float(self.config["time"]), n_points)
         result = self._simulator.solve(values=values, save_at=save_at)
 
-        columns = list(self._species_ids)
+        # Only species simbio actually integrated appear in the result. SBML
+        # species defined by assignment rules (e.g. "Rum1Total"), or otherwise
+        # not emitted, are skipped rather than raising KeyError.
+        columns = [c for c in self._species_ids if c in result]
         arrays = {c: np.asarray(result[c]) for c in columns}
-        times = [float(t) for t in np.asarray(result.coords["time"])]
+        # If the model has no integrable state (e.g. every species is boundary
+        # or driven by an unsupported rate rule), simbio returns an empty
+        # dataset with no `time` coord — fall back to the requested grid so the
+        # step yields an empty-but-valid numeric_result instead of crashing.
+        if "time" in result.coords:
+            times = [float(t) for t in np.asarray(result.coords["time"])]
+        else:
+            times = [float(t) for t in save_at]
         values_rows = [
             [float(arrays[c][i]) for c in columns] for i in range(len(times))
         ]
@@ -402,7 +414,8 @@ class SimbioSteadyStateStep(BaseSimbioStep):
             values=values, t_span=(0.0, t_end), save_at=[0.0, t_end]
         )
         steady = {
-            sid: float(np.asarray(result[sid])[-1]) for sid in self._species_ids
+            sid: float(np.asarray(result[sid])[-1])
+            for sid in self._species_ids if sid in result
         }
         return {"steady_state_concentrations": steady}
 
@@ -483,7 +496,9 @@ class SimbioUTCProcess(Process):
             values=values, t_span=(0.0, float(interval)), save_at=[0.0, float(interval)]
         )
         self._state = {
-            sid: float(np.asarray(result[sid])[-1]) for sid in self._species_ids
+            sid: (float(np.asarray(result[sid])[-1]) if sid in result
+                  else self._state.get(sid, 0.0))
+            for sid in self._species_ids
         }
         self._time += float(interval)
         return {
