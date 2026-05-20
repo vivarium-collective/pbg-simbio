@@ -1,0 +1,51 @@
+digraph bigraph {
+	dpi=150 overlap=false rankdir=LR splines=true
+	node [constraint=false fontsize="16pt" margin=0.005000000000000001 penwidth=2 shape=circle]
+	node [constraint=false fontsize="16pt" margin=0.005000000000000001 penwidth=2 shape=circle]
+	"('stores', 'concentrations')" [label=<concentrations>]
+	node [constraint=false fontsize="16pt" margin=0.005000000000000001 penwidth=2 shape=circle]
+	"('stores',)" [label=<stores>]
+	node [constraint=false fontsize="16pt" margin=0.005000000000000001 penwidth=2 shape=circle]
+	"('stores', 'concentrations')" [label=<concentrations>]
+	node [constraint=false fontsize="16pt" margin=0.005000000000000001 penwidth=2 shape=circle]
+	"('stores', 'concentrations', 'A')" [label=<A>]
+	node [constraint=false fontsize="16pt" margin=0.005000000000000001 penwidth=2 shape=circle]
+	"('stores', 'concentrations', 'B')" [label=<B>]
+	node [constraint=false fontsize="16pt" margin=0.005000000000000001 penwidth=2 shape=circle]
+	"('stores', 'concentrations', 'AB')" [label=<AB>]
+	node [constraint=false fontsize="16pt" margin=0.005000000000000001 penwidth=2 shape=circle]
+	"('global_time',)" [label=<global_time>]
+	node [constraint=false fontsize="16pt" margin=0.005000000000000001 penwidth=2 shape=circle]
+	"('global_time',)" [label=<global_time>]
+	node [constraint=false fontsize="16pt" margin=0.05 penwidth=2 shape=box]
+	"('simbio',)" [label=<simbio>]
+	"('emitter',)" [label=<emitter>]
+	edge [style=filled]
+	"('stores',)" -> "('stores', 'concentrations')" [arrowhead=none constraint=true penwidth=2]
+	edge [style=filled]
+	"('stores', 'concentrations')" -> "('stores', 'concentrations', 'A')" [arrowhead=none constraint=true penwidth=2]
+	edge [style=filled]
+	"('stores', 'concentrations')" -> "('stores', 'concentrations', 'B')" [arrowhead=none constraint=true penwidth=2]
+	edge [style=filled]
+	"('stores', 'concentrations')" -> "('stores', 'concentrations', 'AB')" [arrowhead=none constraint=true penwidth=2]
+	edge [arrowhead=normal arrowsize=1.0 dir=forward penwidth=1 style=dashed]
+	subgraph "('emitter',)" {
+		"('stores', 'concentrations')" -> "('emitter',)" [label="" constraint=true fontsize="10pt" labelloc=t]
+	}
+	edge [arrowhead=normal arrowsize=1.0 dir=forward penwidth=1 style=dashed]
+	subgraph "('emitter',)" {
+		"('global_time',)" -> "('emitter',)" [label="" constraint=true fontsize="10pt" labelloc=t]
+	}
+	edge [arrowhead=normal arrowsize=1.0 dir=both penwidth=1 style=dashed]
+	subgraph "('simbio',)" {
+		"('stores', 'concentrations')" -> "('simbio',)" [label="" constraint=true fontsize="10pt" labelloc=t]
+	}
+	"('simbio', 'r', 'a', 't', 'e', 's')_input" [label="" style=invis width=0]
+	edge [arrowhead=normal arrowsize=1.0 dir=forward penwidth=1 style=dashed]
+	subgraph "('simbio',)" {
+		"('simbio', 'r', 'a', 't', 'e', 's')_input" -> "('simbio',)" [label="" constraint=true fontsize="10pt" labelloc=t]
+	}
+	"('simbio',)" [color="#ef4444" style=filled]
+	"('emitter',)" [color="#8b5cf6" style=filled]
+	"('stores',)" [color="#e0e7ff" style=filled]
+}

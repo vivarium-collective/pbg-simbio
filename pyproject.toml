@@ -1,0 +1,33 @@
+[build-system]
+requires = ["hatchling>=1.18"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pbg-simbio"
+version = "0.1.0"
+description = "Process-bigraph wrapper for simbio (Chemical Reaction Network simulation)"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.12"
+authors = [{name = "Eran Agmon", email = "agmon.eran@gmail.com"}]
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
+dependencies = [
+    "bigraph-schema>=0.0.60",
+    "process-bigraph>=0.0.66",
+    "simbio>=1.1.0",
+    "numpy",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "matplotlib", "plotly", "bigraph-viz"]
+
+[project.urls]
+Homepage = "https://github.com/vivarium-collective/pbg-simbio"
+Issues = "https://github.com/vivarium-collective/pbg-simbio/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["pbg_simbio"]
