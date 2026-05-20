@@ -159,7 +159,7 @@ def load_model_source(model_source: str, *, model_format: str = "auto"):
         with urlopen(model_source) as response:  # noqa: S310 - user-supplied model URL
             text = response.read().decode("utf-8")
     elif os.path.exists(model_source):
-        with open(model_source) as handle:
+        with open(model_source, encoding="utf-8") as handle:
             text = handle.read()
 
     fmt = model_format
