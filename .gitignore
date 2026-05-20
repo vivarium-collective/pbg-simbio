@@ -20,3 +20,5 @@ investigations/*/.run.lock
 reports/assets/*
 !reports/assets/.keep
 .superpowers/brainstorm/
+demo/_bigraph
+demo/_bigraph.*
