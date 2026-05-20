@@ -20,6 +20,14 @@ dependencies = [
     "process-bigraph>=0.0.66",
     "simbio>=1.1.0",
     "numpy",
+    "bigraph-viz>=2.0.3",
+    "pyyaml>=6.0",
+    "jsonschema[format-nongpl]>=4.21",
+    "jinja2>=3.1",
+    "pypdf>=4.0",
+    "matplotlib",
+    "plotly",
+    "vivarium-dashboard",
 ]
 
 [project.optional-dependencies]
@@ -31,3 +39,6 @@ Issues = "https://github.com/vivarium-collective/pbg-simbio/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["pbg_simbio"]
+
+[tool.uv.sources]
+vivarium-dashboard = { path = "/Users/eranagmon/code/vivarium-dashboard", editable = true }
