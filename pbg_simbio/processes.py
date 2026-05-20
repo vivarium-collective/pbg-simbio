@@ -13,7 +13,7 @@ from __future__ import annotations
 from typing import Any
 
 import numpy as np
-from process_bigraph import Process
+from process_bigraph import Process, Step
 
 
 def _normalize_reactant(entry: Any) -> tuple[str, int]:
@@ -236,3 +236,257 @@ class SimbioProcess(Process):
             final = float(np.asarray(result[name])[-1])
             delta[name] = final - float(current[name])
         return {"concentrations": delta}
+
+
+# ---------------------------------------------------------------------------
+# Canonical model-source Steps / Process (parity with pbg-copasi & pbg-tellurium)
+#
+# These mirror the process/step "quartet" the other canonical wrappers expose:
+#   - a base loader mixin              (BaseSimbioStep   ~ BaseTelluriumStep / BaseCopasi)
+#   - a one-shot UTC trajectory Step   (SimbioUTCStep    ~ TelluriumUTCStep / CopasiUTCStep)
+#   - a steady-state Step              (SimbioSteadyStateStep ~ *SteadyStateStep)
+#   - a time-coupled Process           (SimbioUTCProcess ~ TelluriumProcess / CopasiUTCProcess)
+#
+# They take a `model_source` (SBML/Antimony file path, URL, or string) and emit
+# the canonical `numeric_result` trajectory shape, so they drop straight into
+# the pbg-biomodels compare-biomodel composite alongside COPASI and Tellurium.
+# ---------------------------------------------------------------------------
+
+
+class BaseSimbioStep(Step):
+    """Abstract base for simbio model-source Steps.
+
+    Loads an SBML/Antimony model (via :func:`load_model_source`) into a genuine
+    simbio model + ``Simulator`` and caches species / parameter ids. Subclasses
+    implement ``update()`` with the specific task they perform (UTC, steady
+    state).
+    """
+
+    config_schema = {
+        "model_source": {"_type": "string", "_default": ""},
+        "model_format": {"_type": "string", "_default": "auto"},
+    }
+
+    def __init__(self, config=None, core=None):
+        super().__init__(config=config, core=core)
+        self._model = None
+        self._simulator = None
+        self._species_ids: list[str] = []
+        self._param_ids: list[str] = []
+
+    def _simbio_initialize(self):
+        if self._simulator is not None:
+            return
+        from simbio import Simulator
+
+        from .antimony_loader import load_model_source
+
+        source = self.config["model_source"]
+        if not source:
+            raise ValueError(
+                f"{type(self).__name__} requires a non-empty 'model_source'."
+            )
+        self._model, self._species_ids, self._param_ids = load_model_source(
+            source, model_format=self.config["model_format"]
+        )
+        self._simulator = Simulator(self._model)
+
+    def _initial_concentrations(self) -> dict[str, float]:
+        return {
+            sid: float(getattr(self._model, sid).initial or 0.0)
+            for sid in self._species_ids
+        }
+
+    def _override_values(self, incoming: dict[str, float]) -> dict[Any, float]:
+        """Map an incoming {species_id: value} dict to solver `values=` overrides."""
+        values: dict[Any, float] = {}
+        for sid, value in (incoming or {}).items():
+            if sid in self._species_ids:
+                values[getattr(self._model, sid)] = float(value)
+        return values
+
+    def inputs(self):
+        return {}
+
+    def initial_state(self):
+        self._simbio_initialize()
+        return {"species_concentrations": self._initial_concentrations()}
+
+
+class SimbioUTCStep(BaseSimbioStep):
+    """One-shot uniform-time-course Step returning a dense trajectory.
+
+    Integrates ``model_source`` from 0 to ``time`` at ``n_points`` evenly
+    spaced samples and returns the canonical ``numeric_result`` shape
+    (``{time, columns, values}``) — matching ``CopasiUTCStep`` /
+    ``TelluriumUTCStep``. Optional incoming ``species_concentrations`` /
+    ``species_counts`` set the integration initial condition (for coupling).
+    """
+
+    config_schema = {
+        **BaseSimbioStep.config_schema,
+        "time": {"_type": "float", "_default": 10.0},
+        "n_points": {"_type": "integer", "_default": 2},
+    }
+
+    def inputs(self):
+        return {
+            "species_concentrations": "map[float]",
+            "species_counts": "map[float]",
+        }
+
+    def outputs(self):
+        return {"result": "numeric_result"}
+
+    def update(self, state):
+        self._simbio_initialize()
+
+        n_points = int(self.config["n_points"])
+        if n_points < 2:
+            raise ValueError("n_points must be >= 2")
+
+        incoming = (
+            (state or {}).get("species_counts")
+            or (state or {}).get("species_concentrations")
+            or {}
+        )
+        values = self._override_values(incoming)
+
+        save_at = np.linspace(0.0, float(self.config["time"]), n_points)
+        result = self._simulator.solve(values=values, save_at=save_at)
+
+        columns = list(self._species_ids)
+        arrays = {c: np.asarray(result[c]) for c in columns}
+        times = [float(t) for t in np.asarray(result.coords["time"])]
+        values_rows = [
+            [float(arrays[c][i]) for c in columns] for i in range(len(times))
+        ]
+        return {
+            "result": {
+                "time": times,
+                "columns": columns,
+                "values": values_rows,
+            }
+        }
+
+
+class SimbioSteadyStateStep(BaseSimbioStep):
+    """Approximate steady-state Step.
+
+    simbio (an ODE integrator) has no algebraic steady-state solver, so this
+    integrates to a long ``equilibration_time`` and reports the final
+    concentrations as the steady state — honestly an approximation, not a
+    Newton solve. Output matches ``TelluriumSteadyStateStep``.
+    """
+
+    config_schema = {
+        **BaseSimbioStep.config_schema,
+        "equilibration_time": {"_type": "float", "_default": 1.0e4},
+    }
+
+    def outputs(self):
+        return {"steady_state_concentrations": "overwrite[map[float]]"}
+
+    def update(self, state):
+        self._simbio_initialize()
+
+        incoming = (
+            (state or {}).get("species_counts")
+            or (state or {}).get("species_concentrations")
+            or {}
+        )
+        values = self._override_values(incoming)
+
+        t_end = float(self.config["equilibration_time"])
+        result = self._simulator.solve(
+            values=values, t_span=(0.0, t_end), save_at=[0.0, t_end]
+        )
+        steady = {
+            sid: float(np.asarray(result[sid])[-1]) for sid in self._species_ids
+        }
+        return {"steady_state_concentrations": steady}
+
+
+class SimbioUTCProcess(Process):
+    """Time-coupled bridge Process over a ``model_source`` model.
+
+    Advances the integration by ``interval`` on each ``update()`` and reports
+    absolute species concentrations and time — matching the role of
+    ``TelluriumProcess`` / ``CopasiUTCProcess``. Optional incoming
+    ``species_concentrations`` re-seed the state each step (coupling).
+
+    For additive, delta-based composition prefer :class:`SimbioProcess`; this
+    class exists for parity with the other canonical Process wrappers, which
+    report absolute state via ``overwrite``.
+    """
+
+    config_schema = {
+        "model_source": {"_type": "string", "_default": ""},
+        "model_format": {"_type": "string", "_default": "auto"},
+    }
+
+    def __init__(self, config=None, core=None):
+        super().__init__(config=config, core=core)
+        self._model = None
+        self._simulator = None
+        self._species_ids: list[str] = []
+        self._param_ids: list[str] = []
+        self._state: dict[str, float] = {}
+        self._time = 0.0
+
+    def _build(self):
+        if self._simulator is not None:
+            return
+        from simbio import Simulator
+
+        from .antimony_loader import load_model_source
+
+        source = self.config["model_source"]
+        if not source:
+            raise ValueError("SimbioUTCProcess requires a non-empty 'model_source'.")
+        self._model, self._species_ids, self._param_ids = load_model_source(
+            source, model_format=self.config["model_format"]
+        )
+        self._simulator = Simulator(self._model)
+        self._state = {
+            sid: float(getattr(self._model, sid).initial or 0.0)
+            for sid in self._species_ids
+        }
+
+    def inputs(self):
+        return {"species_concentrations": "maybe[map[float]]"}
+
+    def outputs(self):
+        return {
+            "species_concentrations": "overwrite[map[float]]",
+            "time": "overwrite[float]",
+        }
+
+    def initial_state(self):
+        self._build()
+        return {
+            "species_concentrations": dict(self._state),
+            "time": self._time,
+        }
+
+    def update(self, state, interval):
+        self._build()
+
+        incoming = (state or {}).get("species_concentrations")
+        if incoming:
+            for sid, value in incoming.items():
+                if sid in self._state:
+                    self._state[sid] = float(value)
+
+        values = {getattr(self._model, sid): self._state[sid] for sid in self._species_ids}
+        result = self._simulator.solve(
+            values=values, t_span=(0.0, float(interval)), save_at=[0.0, float(interval)]
+        )
+        self._state = {
+            sid: float(np.asarray(result[sid])[-1]) for sid in self._species_ids
+        }
+        self._time += float(interval)
+        return {
+            "species_concentrations": dict(self._state),
+            "time": self._time,
+        }

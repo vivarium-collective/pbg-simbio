@@ -1,14 +1,32 @@
 """pbg-simbio: process-bigraph wrapper for the simbio CRN simulator."""
 
-from .antimony_loader import model_from_antimony, model_from_sbml
+from .antimony_loader import load_model_source, model_from_antimony, model_from_sbml
 from .composites import brusselator, lotka_volterra, repressilator
-from .processes import SimbioProcess, build_crn_model
+from .processes import (
+    BaseSimbioStep,
+    SimbioProcess,
+    SimbioSteadyStateStep,
+    SimbioUTCProcess,
+    SimbioUTCStep,
+    build_crn_model,
+)
+from .types import register_simbio_types
 
 __all__ = [
+    # composable, Antimony-native CRN process
     "SimbioProcess",
     "build_crn_model",
+    # canonical model-source Steps / Process (parity with copasi & tellurium)
+    "BaseSimbioStep",
+    "SimbioUTCStep",
+    "SimbioSteadyStateStep",
+    "SimbioUTCProcess",
+    # loaders + types
     "model_from_antimony",
     "model_from_sbml",
+    "load_model_source",
+    "register_simbio_types",
+    # composite generators
     "brusselator",
     "lotka_volterra",
     "repressilator",

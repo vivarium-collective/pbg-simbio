@@ -135,3 +135,37 @@ def model_from_antimony(antimony: str, *, model_name: str | None = None):
     """
     sbml, name = antimony_to_sbml(antimony, model_name=model_name)
     return model_from_sbml(sbml, name=name)
+
+
+def _looks_like_sbml(text: str) -> bool:
+    head = text.lstrip()[:200].lower()
+    return head.startswith("<?xml") or "<sbml" in head
+
+
+def load_model_source(model_source: str, *, model_format: str = "auto"):
+    """Build a simbio model from an SBML/Antimony file path, URL, or string.
+
+    ``model_format`` is ``"auto"`` (sniff), ``"sbml"``, or ``"antimony"``. This
+    is the entry point the canonical model-source Steps/Processes use, mirroring
+    pbg-copasi's ``model_source`` and pbg-tellurium's ``model``/``model_file``.
+
+    Returns ``(Model, species_names, parameter_names)``.
+    """
+    import os
+    from urllib.request import urlopen
+
+    text = model_source
+    if model_source.startswith(("http://", "https://")):
+        with urlopen(model_source) as response:  # noqa: S310 - user-supplied model URL
+            text = response.read().decode("utf-8")
+    elif os.path.exists(model_source):
+        with open(model_source) as handle:
+            text = handle.read()
+
+    fmt = model_format
+    if fmt == "auto":
+        fmt = "sbml" if _looks_like_sbml(text) else "antimony"
+
+    if fmt == "sbml":
+        return model_from_sbml(text)
+    return model_from_antimony(text)
