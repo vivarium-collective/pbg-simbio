@@ -18,10 +18,19 @@ classifiers = [
 dependencies = [
     "bigraph-schema>=0.0.60",
     "process-bigraph>=0.0.66",
+    "pbg-superpowers",
     "simbio>=1.1.0",
     "antimony>=2.13",
     "python-libsbml>=5.20",
     "numpy",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "matplotlib", "plotly", "bigraph-viz"]
+# Workspace dashboard stack (the `vivarium-dashboard serve` CLI + report deps).
+# Not needed to use the wrapper; install with `pip install pbg-simbio[dashboard]`.
+dashboard = [
+    "vivarium-dashboard",
     "bigraph-viz>=2.0.3",
     "pyyaml>=6.0",
     "jsonschema[format-nongpl]>=4.21",
@@ -29,11 +38,7 @@ dependencies = [
     "pypdf>=4.0",
     "matplotlib",
     "plotly",
-    "vivarium-dashboard",
 ]
-
-[project.optional-dependencies]
-dev = ["pytest", "matplotlib", "plotly", "bigraph-viz"]
 
 [project.urls]
 Homepage = "https://github.com/vivarium-collective/pbg-simbio"
@@ -43,4 +48,8 @@ Issues = "https://github.com/vivarium-collective/pbg-simbio/issues"
 packages = ["pbg_simbio"]
 
 [tool.uv.sources]
-vivarium-dashboard = { path = "/Users/eranagmon/code/vivarium-dashboard", editable = true }
+# Neither is on PyPI; resolve from git so clean installs and Docker builds work
+# (no local-path assumptions). pbg-superpowers is required by the composite
+# generators; vivarium-dashboard is only needed for the optional `dashboard` extra.
+pbg-superpowers = { git = "https://github.com/vivarium-collective/pbg-superpowers.git", branch = "main" }
+vivarium-dashboard = { git = "https://github.com/vivarium-collective/vivarium-dashboard.git", branch = "main" }

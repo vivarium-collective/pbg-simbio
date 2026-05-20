@@ -31,7 +31,7 @@ RUN mkdir -p /app/.results_cache
 # paths inside the workspace (a vendored sibling, a local sub-checkout)
 # resolve. Loses some layer cache on source-only edits — acceptable
 # trade-off for robustness across source types.
-RUN uv sync --no-install-project || uv sync
+RUN uv sync --extra dashboard --no-install-project || uv sync --extra dashboard
 
 EXPOSE 9863
 
