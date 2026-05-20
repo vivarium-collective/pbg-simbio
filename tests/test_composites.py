@@ -1,40 +1,63 @@
-"""Tests for the simbio composite generators and their registration."""
+"""Tests for the simbio (Antimony) composite generators and registration."""
 
+import numpy as np
 from process_bigraph import Composite, allocate_core, gather_emitter_results
 
-from pbg_simbio.composites.crn import michaelis_menten, reversible_binding
+from pbg_simbio.composites.crn import brusselator, lotka_volterra, repressilator
+
+GENERATORS = ["simbio_brusselator", "simbio_lotka_volterra", "simbio_repressilator"]
 
 
-def test_reversible_binding_generator_registered():
+def _run(doc, total_time):
+    core = allocate_core()
+    sim = Composite({"state": doc}, core=core)
+    sim.run(total_time)
+    return gather_emitter_results(sim)[("emitter",)]
+
+
+def test_generators_registered():
     from pbg_superpowers.composite_generator import _REGISTRY
 
-    matches = [eid for eid in _REGISTRY if eid.endswith(".simbio_reversible_binding")]
-    assert matches, f"generator missing; have {list(_REGISTRY)[:5]}"
+    for gen in GENERATORS:
+        matches = [eid for eid in _REGISTRY if eid.endswith("." + gen)]
+        assert matches, f"{gen} missing; have {list(_REGISTRY)[:5]}"
 
 
-def test_michaelis_menten_generator_registered():
-    from pbg_superpowers.composite_generator import _REGISTRY
-
-    matches = [eid for eid in _REGISTRY if eid.endswith(".simbio_michaelis_menten")]
-    assert matches, f"generator missing; have {list(_REGISTRY)[:5]}"
-
-
-def test_reversible_binding_runs():
-    core = allocate_core()
-    doc = reversible_binding(kf=1.0, kr=0.2, interval=0.5)
-    sim = Composite({"state": doc}, core=core)
-    sim.run(3.0)
-    rows = gather_emitter_results(sim)[("emitter",)]
-    assert rows[-1]["concentrations"]["AB"] > 0
+def test_document_wires_both_inputs():
+    """Both process input ports must be wired (concentrations + parameters)."""
+    doc = brusselator()
+    inputs = doc["simbio"]["inputs"]
+    assert inputs["concentrations"] == ["stores", "concentrations"]
+    assert inputs["parameters"] == ["stores", "parameters"]
+    # the parameters store is populated with the model's rate constants
+    assert set(doc["stores"]["parameters"]) == {"k1", "k2", "k3", "k4"}
 
 
-def test_michaelis_menten_produces_product():
-    core = allocate_core()
-    doc = michaelis_menten(kon=1.0, koff=0.5, kcat=2.0, e0=0.2, s0=5.0, interval=0.5)
-    sim = Composite({"state": doc}, core=core)
-    sim.run(10.0)
-    rows = gather_emitter_results(sim)[("emitter",)]
-    final = rows[-1]["concentrations"]
-    assert final["P"] > 0  # substrate is turned into product
-    # enzyme is conserved (free + bound)
-    assert abs((final["E"] + final["ES"]) - 0.2) < 1e-6
+def test_brusselator_oscillates():
+    rows = _run(brusselator(interval=0.25), total_time=20.0)
+    xs = [r["concentrations"]["X"] for r in rows]
+    # an oscillator swings across a wide range rather than settling
+    assert max(xs) - min(xs) > 1.0
+
+
+def test_lotka_volterra_runs():
+    rows = _run(lotka_volterra(interval=0.25), total_time=20.0)
+    prey = [r["concentrations"]["prey"] for r in rows]
+    assert max(prey) - min(prey) > 1.0
+    assert min(prey) >= 0.0  # populations stay non-negative
+
+
+def test_repressilator_hill_kinetics_runs():
+    rows = _run(repressilator(interval=0.5), total_time=40.0)
+    p1 = [r["concentrations"]["p1"] for r in rows]
+    # protein 1 is produced and oscillates under Hill repression
+    assert max(p1) > 1.0
+
+
+def test_parameter_store_perturbs_dynamics():
+    """Changing the parameters store changes the trajectory (input wire is live)."""
+    base = brusselator(k2=3.0, interval=0.25)
+    hot = brusselator(k2=8.0, interval=0.25)
+    b_last = _run(base, 6.0)[-1]["concentrations"]
+    h_last = _run(hot, 6.0)[-1]["concentrations"]
+    assert b_last != h_last

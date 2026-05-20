@@ -19,6 +19,8 @@ dependencies = [
     "bigraph-schema>=0.0.60",
     "process-bigraph>=0.0.66",
     "simbio>=1.1.0",
+    "antimony>=2.13",
+    "python-libsbml>=5.20",
     "numpy",
     "bigraph-viz>=2.0.3",
     "pyyaml>=6.0",

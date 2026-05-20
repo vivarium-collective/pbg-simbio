@@ -15,7 +15,7 @@ import time
 
 from process_bigraph import Composite, allocate_core, gather_emitter_results
 
-from pbg_simbio.composites.crn import michaelis_menten, reversible_binding
+from pbg_simbio.composites.crn import brusselator, lotka_volterra, repressilator
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUTPUT = os.path.join(HERE, "report.html")
@@ -23,35 +23,38 @@ TIMEOUT_S = 120.0
 
 CONFIGS = [
     {
-        "id": "binding",
-        "title": "Reversible binding",
-        "subtitle": "A + B ⇌ AB",
-        "description": "Mass-action association/dissociation relaxing to equilibrium.",
+        "id": "brusselator",
+        "title": "Brusselator",
+        "subtitle": "a chemical clock",
+        "description": "The Prigogine oscillator: an autocatalytic loop drives "
+                       "sustained limit-cycle oscillations.",
         "accent": "#6366f1",
-        "builder": reversible_binding,
-        "params": {"kf": 1.0, "kr": 0.2, "a0": 1.0, "b0": 2.0, "interval": 0.25},
-        "total_time": 12.0,
+        "builder": brusselator,
+        "params": {"k2": 3.0, "k3": 1.0, "interval": 0.25},
+        "total_time": 25.0,
     },
     {
-        "id": "mm",
-        "title": "Michaelis–Menten",
-        "subtitle": "E + S ⇌ ES → E + P",
-        "description": "Enzyme turns substrate into product; enzyme is conserved.",
+        "id": "lotka",
+        "title": "Lotka–Volterra",
+        "subtitle": "predator & prey",
+        "description": "Predator-prey dynamics expressed as a reaction network; "
+                       "prey and predator populations cycle out of phase.",
         "accent": "#0ea5e9",
-        "builder": michaelis_menten,
-        "params": {"kon": 1.0, "koff": 0.5, "kcat": 2.0, "e0": 0.2, "s0": 5.0,
-                   "interval": 0.25},
-        "total_time": 15.0,
+        "builder": lotka_volterra,
+        "params": {"k_birth": 1.1, "k_predation": 0.4, "k_death": 0.4,
+                   "k_repro": 0.1, "interval": 0.25},
+        "total_time": 40.0,
     },
     {
-        "id": "fast",
-        "title": "Fast binding (stressed)",
-        "subtitle": "A + B ⇌ AB, kf×10",
-        "description": "Forward rate pushed 10× — near-instant equilibration.",
+        "id": "repressilator",
+        "title": "Repressilator",
+        "subtitle": "a synthetic genetic oscillator (Hill kinetics)",
+        "description": "Three genes repressing each other in a ring (Elowitz & "
+                       "Leibler 2000). Hill-function rate laws — not mass-action.",
         "accent": "#ef4444",
-        "builder": reversible_binding,
-        "params": {"kf": 10.0, "kr": 0.2, "a0": 1.0, "b0": 2.0, "interval": 0.1},
-        "total_time": 6.0,
+        "builder": repressilator,
+        "params": {"a": 10.0, "n": 3.0, "beta": 1.0, "interval": 0.5},
+        "total_time": 50.0,
     },
 ]
 
@@ -143,8 +146,13 @@ def render(report_data):
             f'<img src="{diagram}" alt="bigraph" style="max-width:100%;border:1px solid #e5e7eb;border-radius:8px"/>'
             if diagram else '<p class="muted">architecture diagram unavailable (graphviz)</p>'
         )
+        antimony = result["doc"]["simbio"]["config"].get("antimony", "")
+        antimony_html = (
+            f'<pre class="antimony">{html_escape(antimony.strip())}</pre>'
+            if antimony else '<p class="muted">(reaction-spec model)</p>'
+        )
         doc_tree = (
-            f'<pre class="doc-tree">{json.dumps(cfg_doc_view(result["doc"]), indent=2)}</pre>'
+            f'<pre class="doc-tree">{html_escape(json.dumps(cfg_doc_view(result["doc"]), indent=2))}</pre>'
         )
         sections.append(f"""
         <section id="{cfg['id']}" style="--accent:{cfg['accent']}">
@@ -160,19 +168,45 @@ def render(report_data):
             <div class="panel"><h3>Time series</h3>{plotly_div(cfg, result)}</div>
             <div class="panel"><h3>Bigraph architecture</h3>{diagram_html}</div>
           </div>
-          <details class="panel"><summary>PBG composite document</summary>{doc_tree}</details>
+          <div class="grid">
+            <div class="panel"><h3>Antimony model</h3><p class="muted">loaded into a genuine simbio model via libantimony → libSBML → simbio core</p>{antimony_html}</div>
+            <div class="panel"><h3>PBG composite document <span class="sub">ports &amp; wires</span></h3>{doc_tree}</div>
+          </div>
         </section>""")
 
     return TEMPLATE.format(nav="".join(nav), sections="".join(sections))
 
 
+def html_escape(s):
+    return (s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
+
+
 def cfg_doc_view(doc):
-    """Shallow, JSON-friendly view of the composite document."""
+    """JSON-friendly view of the composite document, keeping ports and wires.
+
+    The antimony string is replaced by a short marker so the wiring (inputs /
+    outputs port -> store paths) stays the focus of the tree.
+    """
     view = {}
     for k, v in doc.items():
         if isinstance(v, dict) and v.get("_type") in ("process", "step"):
-            view[k] = {"_type": v["_type"], "address": v.get("address"),
-                       "config_keys": list(v.get("config", {}).keys())}
+            node = {
+                "_type": v["_type"],
+                "address": v.get("address"),
+            }
+            if "interval" in v:
+                node["interval"] = v["interval"]
+            config = dict(v.get("config", {}))
+            if "antimony" in config:
+                config["antimony"] = "<antimony string — shown alongside>"
+            if config:
+                node["config"] = config
+            # The whole point: keep the port -> store-path wiring visible.
+            if "inputs" in v:
+                node["inputs"] = v["inputs"]
+            if "outputs" in v:
+                node["outputs"] = v["outputs"]
+            view[k] = node
         else:
             view[k] = v
     return view
@@ -208,6 +242,8 @@ TEMPLATE = """<!doctype html>
   .panel h3 {{ margin:0 0 12px; font-size:.95em; }}
   .doc-tree {{ background:#0f172a; color:#e2e8f0; padding:16px; border-radius:8px;
               overflow:auto; font-size:.8em; }}
+  .antimony {{ background:#1e293b; color:#bae6fd; padding:16px; border-radius:8px;
+              overflow:auto; font-size:.8em; line-height:1.45; }}
   details summary {{ cursor:pointer; font-weight:600; }}
 </style></head>
 <body>

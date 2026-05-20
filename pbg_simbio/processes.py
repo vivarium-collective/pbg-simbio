@@ -106,9 +106,18 @@ def build_crn_model(
 class SimbioProcess(Process):
     """Time-stepped bridge to a simbio Chemical Reaction Network.
 
+    Two equivalent ways to define the network:
+
+    * **Antimony** — set ``config["antimony"]`` to an Antimony model string. It
+      is compiled to SBML (libantimony), extracted (libSBML), and rebuilt with
+      simbio's core (see :mod:`pbg_simbio.antimony_loader`). Arbitrary rate
+      laws (mass-action, Hill, ...) are supported.
+    * **Reaction spec** — set ``config["species"]`` + ``config["reactions"]``
+      for a mass-action network built directly via :func:`build_crn_model`.
+
     The surrounding bigraph owns the absolute species concentrations in a
     shared store. Each step the process reads those concentrations, integrates
-    the CRN forward by ``interval`` with simbio, and emits the **change** in
+    the network forward by ``interval`` with simbio, and emits the **change** in
     each concentration as a ``map[string,float]`` delta — so a sibling process
     (an influx, dilution, transport term, or another reaction module) writing
     the same store composes additively.
@@ -117,11 +126,11 @@ class SimbioProcess(Process):
     ------
     concentrations : map[string,float]
         Current absolute concentration of each species (used as the integration
-        initial condition). Missing species fall back to their configured
-        initial value.
-    rates : map[string,float]
-        Optional per-reaction rate-constant overrides, keyed by reaction name.
-        A controller or temperature-dependent process can write these.
+        initial condition). Missing species fall back to their model initial.
+    parameters : map[string,float]
+        Optional overrides for the model's parameters (rate constants, Hill
+        coefficients, ...), keyed by parameter name. A controller, a
+        temperature model, or a slow regulatory process can write these.
 
     Outputs
     -------
@@ -131,6 +140,8 @@ class SimbioProcess(Process):
     """
 
     config_schema = {
+        # Antimony model string (primary path). If empty, species+reactions are used.
+        "antimony": {"_type": "string", "_default": ""},
         "species": {"_type": "map[float]", "_default": {}},
         # List of reaction dicts; kept permissive so arbitrary CRN topologies
         # pass through bigraph-schema unchanged.
@@ -142,29 +153,61 @@ class SimbioProcess(Process):
         super().__init__(config=config, core=core)
         self._model = None
         self._simulator = None
+        self._species_names: list[str] = []
+        self._param_names: list[str] = []
+        self._species_initials: dict[str, float] = {}
+        # For the reaction-spec path, reaction names carry _rate_<name> params.
         self._reaction_names: list[str] = []
-        self._species_initials = dict(self.config["species"])
+        # Pre-compute the initial state so initial_state() works before _build().
+        if not self.config["antimony"]:
+            self._species_initials = dict(self.config["species"])
 
     def _build(self):
-        from simbio import Simulator
+        from simbio import Parameter, Simulator
 
-        self._model, self._reaction_names = build_crn_model(
-            species=self.config["species"],
-            reactions=self.config["reactions"],
-            volume=self.config["volume"],
-        )
+        if self.config["antimony"]:
+            from .antimony_loader import model_from_antimony
+
+            self._model, self._species_names, self._param_names = model_from_antimony(
+                self.config["antimony"]
+            )
+            self._species_initials = {
+                name: float(getattr(self._model, name).initial or 0.0)
+                for name in self._species_names
+            }
+        else:
+            self._model, self._reaction_names = build_crn_model(
+                species=self.config["species"],
+                reactions=self.config["reactions"],
+                volume=self.config["volume"],
+            )
+            self._species_names = list(self.config["species"])
+            self._species_initials = dict(self.config["species"])
+            # reaction-spec rate constants are exposed as _rate_<name> params
+            self._param_names = list(self._reaction_names)
+
         self._simulator = Simulator(self._model)
+
+    def _param_object(self, name):
+        """Resolve a parameter name to its simbio Parameter on the model."""
+        for attr in (name, f"_rate_{name}"):
+            obj = getattr(self._model, attr, None)
+            if obj is not None:
+                return obj
+        return None
 
     def inputs(self):
         return {
             "concentrations": "map[string,float]",
-            "rates": "map[string,float]",
+            "parameters": "map[string,float]",
         }
 
     def outputs(self):
         return {"concentrations": "map[string,float]"}
 
     def initial_state(self):
+        if self._simulator is None:
+            self._build()
         return {"concentrations": dict(self._species_initials)}
 
     def update(self, state, interval):
@@ -172,15 +215,15 @@ class SimbioProcess(Process):
             self._build()
 
         current = {**self._species_initials, **(state.get("concentrations") or {})}
-        rate_overrides = state.get("rates") or {}
+        param_overrides = state.get("parameters") or {}
 
         values: dict[Any, float] = {}
-        for name in self._species_initials:
+        for name in self._species_names:
             values[getattr(self._model, name)] = float(current[name])
-        for name, rate in rate_overrides.items():
-            param = getattr(self._model, f"_rate_{name}", None)
+        for name, value in param_overrides.items():
+            param = self._param_object(name)
             if param is not None:
-                values[param] = float(rate)
+                values[param] = float(value)
 
         result = self._simulator.solve(
             values=values,
@@ -189,7 +232,7 @@ class SimbioProcess(Process):
         )
 
         delta = {}
-        for name in self._species_initials:
+        for name in self._species_names:
             final = float(np.asarray(result[name])[-1])
             delta[name] = final - float(current[name])
         return {"concentrations": delta}

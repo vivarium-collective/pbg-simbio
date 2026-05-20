@@ -30,7 +30,7 @@ def test_ports_are_dicts():
     proc = SimbioProcess(config=REVERSIBLE, core=allocate_core())
     assert isinstance(proc.inputs(), dict)
     assert isinstance(proc.outputs(), dict)
-    assert set(proc.inputs()) == {"concentrations", "rates"}
+    assert set(proc.inputs()) == {"concentrations", "parameters"}
     assert set(proc.outputs()) == {"concentrations"}
 
 
@@ -60,12 +60,59 @@ def test_mass_conservation():
 
 
 def test_rate_override_input():
-    """A higher 'bind' rate fed via the rates port produces more product."""
+    """A higher 'bind' rate fed via the parameters port produces more product."""
     proc = SimbioProcess(config=REVERSIBLE, core=allocate_core())
     state = {"concentrations": {"A": 1.0, "B": 2.0, "AB": 0.0}}
-    slow = proc.update({**state, "rates": {"bind": 0.5}}, interval=1.0)
-    fast = proc.update({**state, "rates": {"bind": 5.0}}, interval=1.0)
+    slow = proc.update({**state, "parameters": {"bind": 0.5}}, interval=1.0)
+    fast = proc.update({**state, "parameters": {"bind": 5.0}}, interval=1.0)
     assert fast["concentrations"]["AB"] > slow["concentrations"]["AB"]
+
+
+# --- Antimony path -----------------------------------------------------------
+
+BRUSSELATOR_ANT = """\
+model brusselator
+  species X = 1, Y = 1;
+  k1 = 1; k2 = 3; k3 = 1; k4 = 1;
+  J1: -> X; k1;
+  J2: X -> Y; k2 * X;
+  J3: 2 X + Y -> 3 X; k3 * X^2 * Y;
+  J4: X ->; k4 * X;
+end
+"""
+
+
+def test_antimony_model_loads_and_steps():
+    proc = SimbioProcess(config={"antimony": BRUSSELATOR_ANT}, core=allocate_core())
+    # initial_state() triggers the lazy build (libantimony -> libSBML -> simbio)
+    assert proc.initial_state()["concentrations"] == {"X": 1.0, "Y": 1.0}
+    assert proc._species_names == ["X", "Y"]
+    assert proc._param_names == ["k1", "k2", "k3", "k4"]
+    out = proc.update({"concentrations": {"X": 1.0, "Y": 1.0}}, interval=0.5)
+    assert set(out["concentrations"]) == {"X", "Y"}
+
+
+def test_antimony_parameter_override_changes_dynamics():
+    proc = SimbioProcess(config={"antimony": BRUSSELATOR_ANT}, core=allocate_core())
+    state = {"concentrations": {"X": 1.0, "Y": 1.0}}
+    base = proc.update(state, interval=0.5)["concentrations"]
+    hot = proc.update({**state, "parameters": {"k2": 8.0}}, interval=0.5)["concentrations"]
+    assert base != hot
+
+
+def test_antimony_hill_kinetics_supported():
+    """Non-mass-action (Hill) rate laws load through libSBML -> simbio."""
+    hill = """\
+model hill
+  species S = 5, P = 0;
+  vmax = 2; K = 1; n = 4;
+  r: S -> P; vmax * S^n / (K^n + S^n);
+end
+"""
+    proc = SimbioProcess(config={"antimony": hill}, core=allocate_core())
+    out = proc.update({"concentrations": {"S": 5.0, "P": 0.0}}, interval=1.0)
+    assert out["concentrations"]["P"] > 0
+    assert out["concentrations"]["S"] < 0
 
 
 def test_composite_run_accumulates_in_store():
