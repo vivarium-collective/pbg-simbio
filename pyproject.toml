@@ -20,7 +20,11 @@ dependencies = [
     "process-bigraph>=0.0.66",
     "pbg-superpowers",
     "simbio>=1.1.0",
-    "antimony>=2.13",
+    # antimony (libantimony bindings) only ships a linux-aarch64 wheel at
+    # 2.14.0 (newer releases dropped it); pin that on linux/arm64 so Docker
+    # images build there, and take the latest everywhere else.
+    "antimony>=2.15; platform_machine != 'aarch64' or sys_platform != 'linux'",
+    "antimony==2.14.0; platform_machine == 'aarch64' and sys_platform == 'linux'",
     "python-libsbml>=5.20",
     "numpy",
 ]
