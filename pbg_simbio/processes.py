@@ -267,6 +267,12 @@ class BaseSimbioStep(Step):
     config_schema = {
         "model_source": {"_type": "string", "_default": ""},
         "model_format": {"_type": "string", "_default": "auto"},
+        # Integration tolerances for the LSODA solver. simbio/poincare default
+        # to rtol=1e-3, atol=1e-6 — ~1000x looser than COPASI/Tellurium CVODE,
+        # which makes stiff models diverge badly. Default to CVODE-comparable
+        # tolerances here; tighten further (e.g. rtol=1e-8) for very stiff CRNs.
+        "rtol": {"_type": "float", "_default": 1.0e-6},
+        "atol": {"_type": "float", "_default": 1.0e-9},
     }
 
     def __init__(self, config=None, core=None):
@@ -275,6 +281,13 @@ class BaseSimbioStep(Step):
         self._simulator = None
         self._species_ids: list[str] = []
         self._param_ids: list[str] = []
+
+    def _solver(self):
+        """Build the LSODA solver from the configured rtol/atol."""
+        from poincare.solvers import LSODA
+
+        return LSODA(rtol=float(self.config["rtol"]),
+                     atol=float(self.config["atol"]))
 
     def _simbio_initialize(self):
         if self._simulator is not None:
@@ -355,7 +368,9 @@ class SimbioUTCStep(BaseSimbioStep):
         values = self._override_values(incoming)
 
         save_at = np.linspace(0.0, float(self.config["time"]), n_points)
-        result = self._simulator.solve(values=values, save_at=save_at)
+        result = self._simulator.solve(
+            values=values, save_at=save_at, solver=self._solver()
+        )
 
         # Only species simbio actually integrated appear in the result. SBML
         # species defined by assignment rules (e.g. "Rum1Total"), or otherwise
@@ -411,7 +426,8 @@ class SimbioSteadyStateStep(BaseSimbioStep):
 
         t_end = float(self.config["equilibration_time"])
         result = self._simulator.solve(
-            values=values, t_span=(0.0, t_end), save_at=[0.0, t_end]
+            values=values, t_span=(0.0, t_end), save_at=[0.0, t_end],
+            solver=self._solver(),
         )
         steady = {
             sid: float(np.asarray(result[sid])[-1])
@@ -436,6 +452,9 @@ class SimbioUTCProcess(Process):
     config_schema = {
         "model_source": {"_type": "string", "_default": ""},
         "model_format": {"_type": "string", "_default": "auto"},
+        # See BaseSimbioStep — CVODE-comparable defaults, override for stiff CRNs.
+        "rtol": {"_type": "float", "_default": 1.0e-6},
+        "atol": {"_type": "float", "_default": 1.0e-9},
     }
 
     def __init__(self, config=None, core=None):
@@ -446,6 +465,12 @@ class SimbioUTCProcess(Process):
         self._param_ids: list[str] = []
         self._state: dict[str, float] = {}
         self._time = 0.0
+
+    def _solver(self):
+        from poincare.solvers import LSODA
+
+        return LSODA(rtol=float(self.config["rtol"]),
+                     atol=float(self.config["atol"]))
 
     def _build(self):
         if self._simulator is not None:
@@ -493,7 +518,8 @@ class SimbioUTCProcess(Process):
 
         values = {getattr(self._model, sid): self._state[sid] for sid in self._species_ids}
         result = self._simulator.solve(
-            values=values, t_span=(0.0, float(interval)), save_at=[0.0, float(interval)]
+            values=values, t_span=(0.0, float(interval)), save_at=[0.0, float(interval)],
+            solver=self._solver(),
         )
         self._state = {
             sid: (float(np.asarray(result[sid])[-1]) if sid in result

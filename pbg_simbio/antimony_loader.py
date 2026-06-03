@@ -87,6 +87,16 @@ def model_from_sbml(sbml: str, name: str = "model"):
     eval_names: dict[str, Any] = {}
     species_objs: dict[str, Any] = {}
     species_names: list[str] = []
+    # Per-species compartment volume + whether the species is tracked as a
+    # concentration. SBML rate laws are written in substance/time and (unless
+    # `hasOnlySubstanceUnits`) reference species by CONCENTRATION, so we track
+    # such species as concentrations and convert an `initialAmount` to a
+    # concentration via the compartment volume. The extensive rate law is then
+    # divided by that volume per reaction (below) to yield dConc/dt — without
+    # this, models whose compartment volume != 1 diverge from COPASI/Tellurium
+    # (the amount↔concentration scaling bug; BIOMD1/2/9 had nRMSE ~0.4).
+    species_volume: dict[str, float] = {}
+    concentration_species: set[str] = set()
     # Boundary / constant species are referenced by rate laws but are NOT
     # consumed by reactions (their value is held fixed unless a rule changes it).
     fixed_species: set[str] = set()
@@ -94,15 +104,25 @@ def model_from_sbml(sbml: str, name: str = "model"):
         sid = s.getId()
         if sid in assignment_vars:
             continue  # derived; inlined below
+        vol_s = float(compartment_size.get(s.getCompartment(), volume))
+        species_volume[sid] = vol_s
+        substance_units = s.getHasOnlySubstanceUnits()
         if s.isSetInitialConcentration():
-            initial, is_conc = s.getInitialConcentration(), True
+            conc0 = s.getInitialConcentration()
+            amt0 = conc0 * vol_s
         elif s.isSetInitialAmount():
-            initial, is_conc = s.getInitialAmount(), False
+            amt0 = s.getInitialAmount()
+            conc0 = (amt0 / vol_s) if vol_s else amt0
         else:
-            initial, is_conc = 0.0, True
+            conc0 = amt0 = 0.0
+        if substance_units:
+            initial, factory = amt0, amount
+        else:
+            initial, factory = conc0, concentration
+            concentration_species.add(sid)
         if initial is None or (isinstance(initial, float) and math.isnan(initial)):
             initial = 0.0
-        obj = (concentration if is_conc else amount)(default=float(initial))
+        obj = factory(default=float(initial))
         namespace[sid] = obj
         namespace["__annotations__"][sid] = type(obj)
         species_objs[sid] = obj
@@ -181,6 +201,26 @@ def model_from_sbml(sbml: str, name: str = "model"):
 
         reactants = _reactants(r.getListOfReactants())
         products = _reactants(r.getListOfProducts())
+
+        # SBML kinetic laws give the reaction rate in substance/time. simbio
+        # applies `rate_law` to a concentration species as dConc/dt, so convert
+        # by dividing the extensive rate by the species' compartment volume. We
+        # can only do this with a single scalar divisor, so apply it when every
+        # state species the reaction touches is a concentration sharing one
+        # volume (the single-compartment case). Mixed-volume or amount-tracked
+        # reactions keep the raw rate (volume==1 makes the division a no-op for
+        # the common case, so nothing regresses there).
+        touched = [sr.getSpecies() for sr in
+                   list(r.getListOfReactants()) + list(r.getListOfProducts())
+                   if sr.getSpecies() in species_objs
+                   and sr.getSpecies() not in fixed_species]
+        vols = {species_volume[sid] for sid in touched}
+        all_conc = all(sid in concentration_species for sid in touched)
+        if touched and all_conc and len(vols) == 1:
+            divisor = next(iter(vols))
+            if divisor not in (0.0, 1.0):
+                rate_law = rate_law / float(divisor)
+
         namespace[f"_rxn_{r.getId()}"] = RateLaw(
             reactants=reactants, products=products, rate_law=rate_law
         )
