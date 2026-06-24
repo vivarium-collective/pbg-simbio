@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 from process_bigraph import Composite, allocate_core, gather_emitter_results
 
-from pbg_simbio import SimbioProcess, build_crn_model
+from pbg_simbio import SimbioProcess, build_core, build_crn_model
 
 REVERSIBLE = {
     "species": {"A": 1.0, "B": 2.0, "AB": 0.0},
@@ -117,7 +117,8 @@ end
 
 def test_composite_run_accumulates_in_store():
     """Deltas accumulate in the shared store across a real Composite run."""
-    core = allocate_core()
+    # build_core() registers SimbioProcess so `local:SimbioProcess` resolves.
+    core = build_core()
     doc = {
         "simbio": {
             "_type": "process",

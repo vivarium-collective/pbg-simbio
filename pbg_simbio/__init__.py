@@ -2,6 +2,7 @@
 
 from .antimony_loader import load_model_source, model_from_antimony, model_from_sbml
 from .composites import brusselator, lotka_volterra, repressilator
+from .core import build_core, register_simbio_processes
 from .processes import (
     BaseSimbioStep,
     SimbioProcess,
@@ -26,6 +27,9 @@ __all__ = [
     "model_from_sbml",
     "load_model_source",
     "register_simbio_types",
+    # workspace core (registers types + this workspace's own processes)
+    "build_core",
+    "register_simbio_processes",
     # composite generators
     "brusselator",
     "lotka_volterra",

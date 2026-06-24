@@ -1,15 +1,18 @@
 """Tests for the simbio (Antimony) composite generators and registration."""
 
 import numpy as np
-from process_bigraph import Composite, allocate_core, gather_emitter_results
+from process_bigraph import Composite, gather_emitter_results
 
+from pbg_simbio import build_core
 from pbg_simbio.composites.crn import brusselator, lotka_volterra, repressilator
 
 GENERATORS = ["simbio_brusselator", "simbio_lotka_volterra", "simbio_repressilator"]
 
 
 def _run(doc, total_time):
-    core = allocate_core()
+    # build_core() registers SimbioProcess so the composite's `local:SimbioProcess`
+    # address resolves (a bare allocate_core() does not see the editable workspace pkg).
+    core = build_core()
     sim = Composite({"state": doc}, core=core)
     sim.run(total_time)
     return gather_emitter_results(sim)[("emitter",)]
