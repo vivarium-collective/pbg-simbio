@@ -31,10 +31,10 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest", "matplotlib", "plotly", "bigraph-viz"]
-# Workspace dashboard stack (the `vivarium-dashboard serve` CLI + report deps).
+# Workspace dashboard stack (the `vivarium-workbench serve` CLI + report deps).
 # Not needed to use the wrapper; install with `pip install pbg-simbio[dashboard]`.
 dashboard = [
-    "vivarium-dashboard",
+    "vivarium-workbench",
     "bigraph-viz>=2.0.3",
     "pyyaml>=6.0",
     "jsonschema[format-nongpl]>=4.21",
@@ -54,14 +54,14 @@ packages = ["pbg_simbio"]
 [tool.uv.sources]
 # Neither is on PyPI; resolve from git so clean installs and Docker builds work
 # (no local-path assumptions). pbg-superpowers is required by the composite
-# generators; vivarium-dashboard is only needed for the optional `dashboard` extra.
+# generators; vivarium-workbench is only needed for the optional `dashboard` extra.
 pbg-superpowers = { git = "https://github.com/vivarium-collective/pbg-superpowers.git", branch = "main" }
-vivarium-dashboard = { git = "https://github.com/vivarium-collective/vivarium-dashboard.git", branch = "main" }
+vivarium-workbench = { git = "https://github.com/vivarium-collective/vivarium-dashboard.git", branch = "main" }
 
 [tool.uv]
-# pbg-superpowers 0.14+ and vivarium-dashboard both depend on the (PyPI-absent)
+# pbg-superpowers 0.14+ and vivarium-workbench both depend on the (PyPI-absent)
 # pbg-basic-processes but pin it differently — pbg-superpowers via a
-# `[tool.uv.sources]` `branch = "main"`, vivarium-dashboard via a PEP 508 direct
+# `[tool.uv.sources]` `branch = "main"`, vivarium-workbench via a PEP 508 direct
 # reference `... @ git+...@main`. uv treats those two forms as conflicting URLs
 # and fails to resolve the `dashboard` extra. A single override collapses every
 # declaration to one spec so the graph resolves and the Docker wheel build runs.
