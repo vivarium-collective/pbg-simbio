@@ -109,11 +109,6 @@ wheels = [
 ]
 
 [[package]]
-name = "bigraph-loom"
-version = "0.1.0"
-source = { git = "https://github.com/vivarium-collective/bigraph-loom.git?rev=main#41b556c7f93bc9b65f2ea593ccb82bf15ba386a4" }
-
-[[package]]
 name = "bigraph-schema"
 version = "1.4.2"
 source = { registry = "https://pypi.org/simple" }
@@ -499,7 +494,7 @@ wheels = [
 [[package]]
 name = "investigation-contracts"
 version = "0.2.0"
-source = { git = "https://github.com/vivarium-collective/investigation-contracts.git?branch=main#65c793fd231d952e49a9cfe4244797dadde1bedc" }
+source = { git = "https://github.com/vivarium-collective/investigation-contracts.git?rev=65c793fd231d952e49a9cfe4244797dadde1bedc#65c793fd231d952e49a9cfe4244797dadde1bedc" }
 dependencies = [
     { name = "bigraph-schema" },
     { name = "pydantic" },
@@ -1086,7 +1081,7 @@ requires-dist = [
     { name = "python-libsbml", specifier = ">=5.20" },
     { name = "pyyaml", marker = "extra == 'dashboard'", specifier = ">=6.0" },
     { name = "simbio", specifier = ">=1.1.0" },
-    { name = "vivarium-workbench", marker = "extra == 'dashboard'", git = "https://github.com/vivarium-collective/vivarium-dashboard.git?branch=main" },
+    { name = "vivarium-workbench", marker = "extra == 'dashboard'", git = "https://github.com/vivarium-collective/vivarium-workbench.git?branch=main" },
 ]
 provides-extras = ["dev", "dashboard"]
 
@@ -2032,10 +2027,9 @@ wheels = [
 
 [[package]]
 name = "vivarium-workbench"
-version = "0.1.0"
-source = { git = "https://github.com/vivarium-collective/vivarium-dashboard.git?branch=main#ee0ae6734458edfc7d01e6929ce2fd46219b4761" }
+version = "0.3.6"
+source = { git = "https://github.com/vivarium-collective/vivarium-workbench.git?branch=main#b8bd706d000b3711177638a143b3f8352647c70d" }
 dependencies = [
-    { name = "bigraph-loom" },
     { name = "bigraph-schema" },
     { name = "fastapi" },
     { name = "investigation-contracts" },

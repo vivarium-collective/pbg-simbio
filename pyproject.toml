@@ -56,7 +56,7 @@ packages = ["pbg_simbio"]
 # (no local-path assumptions). pbg-superpowers is required by the composite
 # generators; vivarium-workbench is only needed for the optional `dashboard` extra.
 pbg-superpowers = { git = "https://github.com/vivarium-collective/pbg-superpowers.git", branch = "main" }
-vivarium-workbench = { git = "https://github.com/vivarium-collective/vivarium-dashboard.git", branch = "main" }
+vivarium-workbench = { git = "https://github.com/vivarium-collective/vivarium-workbench.git", branch = "main" }
 
 [tool.uv]
 # pbg-superpowers 0.14+ and vivarium-workbench both depend on the (PyPI-absent)
