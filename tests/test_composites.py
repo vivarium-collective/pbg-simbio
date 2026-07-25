@@ -19,7 +19,7 @@ def _run(doc, total_time):
 
 
 def test_generators_registered():
-    from pbg_superpowers.composite_generator import _REGISTRY
+    from viva_superpowers.composite_generator import _REGISTRY
 
     for gen in GENERATORS:
         matches = [eid for eid in _REGISTRY if eid.endswith("." + gen)]

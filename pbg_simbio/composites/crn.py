@@ -9,7 +9,7 @@ emitter — so the dashboard's Composites tab can run and sweep them.
 
 from __future__ import annotations
 
-from pbg_superpowers.composite_generator import composite_generator
+from viva_superpowers.composite_generator import composite_generator
 
 # --- Antimony model definitions (shown in the demo report) -------------------
 
