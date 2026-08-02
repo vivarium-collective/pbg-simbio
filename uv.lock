@@ -1036,10 +1036,10 @@ dependencies = [
     { name = "antimony", version = "3.1.3", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'aarch64' or sys_platform != 'linux'" },
     { name = "bigraph-schema" },
     { name = "numpy" },
-    { name = "pbg-superpowers" },
     { name = "process-bigraph" },
     { name = "python-libsbml" },
     { name = "simbio" },
+    { name = "viva-superpowers" },
 ]
 
 [package.optional-dependencies]
@@ -1072,7 +1072,6 @@ requires-dist = [
     { name = "matplotlib", marker = "extra == 'dashboard'" },
     { name = "matplotlib", marker = "extra == 'dev'" },
     { name = "numpy" },
-    { name = "pbg-superpowers", git = "https://github.com/vivarium-collective/pbg-superpowers.git?branch=main" },
     { name = "plotly", marker = "extra == 'dashboard'" },
     { name = "plotly", marker = "extra == 'dev'" },
     { name = "process-bigraph", specifier = ">=0.0.66" },
@@ -1081,6 +1080,7 @@ requires-dist = [
     { name = "python-libsbml", specifier = ">=5.20" },
     { name = "pyyaml", marker = "extra == 'dashboard'", specifier = ">=6.0" },
     { name = "simbio", specifier = ">=1.1.0" },
+    { name = "viva-superpowers", git = "https://github.com/vivarium-collective/viva-superpowers.git?branch=main" },
     { name = "vivarium-workbench", marker = "extra == 'dashboard'", git = "https://github.com/vivarium-collective/vivarium-workbench.git?branch=main" },
 ]
 provides-extras = ["dev", "dashboard"]
@@ -1088,7 +1088,7 @@ provides-extras = ["dev", "dashboard"]
 [[package]]
 name = "pbg-superpowers"
 version = "0.16.0"
-source = { git = "https://github.com/vivarium-collective/pbg-superpowers.git?branch=main#457c3bb3fb3b793ebfc3b18a360ae969539c0e12" }
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "bigraph-schema" },
     { name = "click" },
@@ -1099,6 +1099,10 @@ dependencies = [
     { name = "pypdf" },
     { name = "pyyaml" },
     { name = "ruamel-yaml" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b4/c7/539d3dfa46a896370c8ba6a4b71a8c67f5cb523cb01d8fe0aa9e122cdde5/pbg_superpowers-0.16.0.tar.gz", hash = "sha256:29586e3af2b732934717c485931480bd4e33613a07543f3077d83c13d5d7213b", size = 1413823, upload-time = "2026-07-25T20:38:24.505Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4b/92/84914100888dba584150e743cd35ab23332ce4ecd58f6bdfeccb9371abb8/pbg_superpowers-0.16.0-py3-none-any.whl", hash = "sha256:5bc54398d2f0313f1d734e989f85b78c3e5b3d825e9582fbc41d709dfbedbcc7", size = 362202, upload-time = "2026-07-25T20:38:22.915Z" },
 ]
 
 [[package]]
@@ -2022,6 +2026,22 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/c4/1f/fa18009dea8469069cca78a4e877a008ab78f08b064bfc9ab891579077ff/uvicorn-0.49.0.tar.gz", hash = "sha256:ebf4271aa580d9de97f93192d4595176df6e91f9aae919ca73e4fc07df1e66a3", size = 91284, upload-time = "2026-06-03T22:01:30.448Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/88/fa/e1388bbcf24ef3274f45c0c1c7b501fd14971037c1b6ee23610553307497/uvicorn-0.49.0-py3-none-any.whl", hash = "sha256:ba3d14c3ee7e41c6c654c46c9eb489d33213cdd30aa1696eab1374337c13f68f", size = 71376, upload-time = "2026-06-03T22:01:29.037Z" },
+]
+
+[[package]]
+name = "viva-superpowers"
+version = "0.18.0"
+source = { git = "https://github.com/vivarium-collective/viva-superpowers.git?branch=main#734d0458a7dde1e53362bc8018039afec6ee3da6" }
+dependencies = [
+    { name = "bigraph-schema" },
+    { name = "click" },
+    { name = "jinja2" },
+    { name = "jsonschema", extra = ["format-nongpl"] },
+    { name = "pbg-emitters" },
+    { name = "process-bigraph" },
+    { name = "pypdf" },
+    { name = "pyyaml" },
+    { name = "ruamel-yaml" },
 ]
 
 [[package]]

@@ -18,7 +18,7 @@ classifiers = [
 dependencies = [
     "bigraph-schema>=0.0.60",
     "process-bigraph>=0.0.66",
-    "pbg-superpowers",
+    "viva-superpowers",
     "simbio>=1.1.0",
     # antimony (libantimony bindings) only ships a linux-aarch64 wheel at
     # 2.14.0 (newer releases dropped it); pin that on linux/arm64 so Docker
@@ -55,7 +55,7 @@ packages = ["pbg_simbio"]
 # Neither is on PyPI; resolve from git so clean installs and Docker builds work
 # (no local-path assumptions). pbg-superpowers is required by the composite
 # generators; vivarium-workbench is only needed for the optional `dashboard` extra.
-pbg-superpowers = { git = "https://github.com/vivarium-collective/pbg-superpowers.git", branch = "main" }
+viva-superpowers = { git = "https://github.com/vivarium-collective/viva-superpowers.git", branch = "main" }
 vivarium-workbench = { git = "https://github.com/vivarium-collective/vivarium-workbench.git", branch = "main" }
 
 [tool.uv]
